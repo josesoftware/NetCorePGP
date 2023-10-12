@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -860,6 +861,137 @@ namespace NetCorePGP
         {
             // Instancia un nuevo PgpSecretKeyRing desde Array de Bytes y lo inserta al keyRing
             InsertSecretKeyRing(new PgpSecretKeyRing(encodedSecretKeyring));
+        }
+
+        /// <summary>
+        /// Método estático que cambia el passphrase de un PgpSecretKeyRing
+        /// </summary>
+        /// <param name="oldKeyRing">PgpSecretKeyRing al que cambiar la contraseña</param>
+        /// <param name="oldPassphrase">Passphrasae antiguo del PgpSecretKeyRing</param>
+        /// <param name="newPassphrase">Nuevo passphrase a aplicar</param>
+        /// <exception cref="ArgumentException">Cuando no se ecuentra una PgpSecretKey con capacidad para firmar en el PgpSecretKeyRing</exception>
+        /// <returns>PgpSecretKeyRing con el passphrase actualizado</returns>
+        public static PgpSecretKeyRing ChangeSecretKeyPassphrase(PgpSecretKeyRing oldKeyRing, char[] oldPassphrase, char[] newPassphrase)
+        {
+            // Preparamos una instancia de PgpSecretKey almacenada en la referencia oldKey
+            PgpSecretKey oldKey = null;
+
+            // Encontrar la clave privada dentro del anillo con la contraseña antigua
+            foreach (PgpSecretKey key in oldKeyRing.GetSecretKeys())
+            {
+                // Si la clave iterada tiene capacidad para realizar firmas
+                if (key.IsSigningKey)
+                {
+                    // Fija el oldKey como la clave iterada
+                    oldKey = key;
+
+                    // Sale del bucle
+                    break;
+                }
+            }
+
+            // Si no se recupera una key validad
+            if (oldKey == null)
+            {
+                // Retorna excepción
+                throw new ArgumentException("No se encontró una clave privada válida en el anillo.");
+            }
+
+            // Comprueba que el oldPassphrase sea correcto
+            oldKey.ExtractPrivateKey(oldPassphrase); // Retornará excepción si el passphrase no es correcto
+
+            // Crear una nueva clave privada con la nueva contraseña
+            PgpSecretKey newKey = PgpSecretKey.CopyWithNewPassword(oldKey, oldPassphrase, newPassphrase, oldKey.KeyEncryptionAlgorithm, new SecureRandom());
+
+            // Crear un nuevo anillo con la nueva clave privada
+            PgpSecretKeyRing newKeyRing = new(Array.Empty<byte>());
+            
+            // Recorre todos los SecretKey del KeyRing original
+            foreach (PgpSecretKey key in oldKeyRing.GetSecretKeys())
+            {
+                // Si la SecretKey iterada es la marcada como oldKey
+                if (key == oldKey)
+                {
+                    // Inserta la SecretKey con la nueva contraseña
+                    newKeyRing = PgpSecretKeyRing.InsertSecretKey(newKeyRing, newKey);
+
+                    // Pasa de ciclo
+                    continue;
+                }
+
+                // Inserta la SecretKey con la nueva contraseña
+                newKeyRing = PgpSecretKeyRing.InsertSecretKey(newKeyRing, key);
+            }
+
+            // Retorna el SecretKeyRing
+            return newKeyRing;
+        }
+
+        /// <summary>
+        /// Método que cambia el passphrase de un PgpSecretKeyRing y lo actualiza en el PgpSecretKeyRingBundle
+        /// </summary>
+        /// <param name="oldKeyRing">PgpSecretKeyRing al que cambiar la contraseña</param>
+        /// <param name="oldPassphrase">Passphrasae antiguo del PgpSecretKeyRing</param>
+        /// <param name="newPassphrase">Nuevo passphrase a aplicar</param>
+        /// <exception cref="ArgumentException">Cuando no se ecuentra una PgpSecretKey con capacidad para firmar en el PgpSecretKeyRing</exception>
+        /// <returns>PgpSecretKeyRing con el passphrase actualizado</returns>
+        public PgpSecretKeyRing ChangePassphrase(PgpSecretKeyRing oldKeyRing, char[] oldPassphrase, char[] newPassphrase)
+        {
+            // Preparamos una instancia de PgpSecretKey almacenada en la referencia oldKey
+            PgpSecretKey oldKey = null;
+
+            // Encontrar la clave privada dentro del anillo con la contraseña antigua
+            foreach (PgpSecretKey key in oldKeyRing.GetSecretKeys())
+            {
+                // Si la clave iterada tiene capacidad para realizar firmas
+                if (key.IsSigningKey)
+                {
+                    // Fija el oldKey como la clave iterada
+                    oldKey = key;
+
+                    // Sale del bucle
+                    break;
+                }
+            }
+
+            // Si no se recupera una key validad
+            if (oldKey == null)
+            {
+                // Retorna excepción
+                throw new ArgumentException("No se encontró una clave privada válida en el anillo.");
+            }
+
+            // Comprueba que el oldPassphrase sea correcto
+            oldKey.ExtractPrivateKey(oldPassphrase); // Retornará excepción si el passphrase no es correcto
+
+            // Crear una nueva clave privada con la nueva contraseña
+            PgpSecretKey newKey = PgpSecretKey.CopyWithNewPassword(oldKey, oldPassphrase, newPassphrase, oldKey.KeyEncryptionAlgorithm, new SecureRandom());
+
+            // Crear un nuevo anillo con la nueva clave privada
+            PgpSecretKeyRing newKeyRing = new(Array.Empty<byte>());
+
+            // Recorre todos los SecretKey del KeyRing original
+            foreach (PgpSecretKey key in oldKeyRing.GetSecretKeys())
+            {
+                // Si la SecretKey iterada es la marcada como oldKey
+                if (key == oldKey)
+                {
+                    // Inserta la SecretKey con la nueva contraseña
+                    newKeyRing = PgpSecretKeyRing.InsertSecretKey(newKeyRing, newKey);
+
+                    // Pasa de ciclo
+                    continue;
+                }
+
+                // Inserta la SecretKey con la nueva contraseña
+                newKeyRing = PgpSecretKeyRing.InsertSecretKey(newKeyRing, key);
+            }
+
+            // Actualiza el keyringBundle
+            UpdateKeyRing(newKeyRing);
+
+            // Retorna el SecretKeyRing
+            return newKeyRing;
         }
 
         /// <summary>
