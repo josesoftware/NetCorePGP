@@ -79,7 +79,7 @@ namespace NetCorePGP
             }
 
             // Método que lleva a cabo una encriptación de un array de bytes usando el algoritmo de encriptación de clave simétrica AES
-            public static byte[] Encrypt(byte[] clearBytes, byte[] key, CipherMode cipherMode = CipherMode.GCM, Padding padding = Padding.NoPadding, KeyLength keyLength = KeyLength.AES256)
+            public static byte[] Encrypt(byte[] clearBytes, byte[] key, CipherMode cipherMode = CipherMode.GCM, Padding padding = Padding.NoPadding, KeyLength keyLength = KeyLength.AES256, bool debug = false)
             {
                 // Resetea contador de tiempo transcurrido
                 Utilities.Time.ResetElapsed();
@@ -88,7 +88,7 @@ namespace NetCorePGP
                 byte[] encryptedData = DoEncrypt(clearBytes, key, cipherMode, padding, keyLength);
 
                 // Escribe en log
-                Debug.WriteLine(string.Format("Encryption of {0} successfull in {1}", Utilities.File.GetSizeFormatted(clearBytes.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds, true)), "AES Encryption");
+                if (debug) { Debug.WriteLine(string.Format("Encryption of {0} successfull in {1}", Utilities.File.GetSizeFormatted(clearBytes.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds, true)), "AES Encryption"); }
 
                 // Retorna los datos desencriptados
                 return encryptedData;

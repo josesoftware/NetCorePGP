@@ -30,13 +30,13 @@ namespace NetCorePGP
                 return TheHash;
             }
 
-            public static string ComputeBytesToString(byte[] inner, bool uppercase = false)
+            public static string ParseString(byte[] innerHash, bool uppercase = false)
             {
                 // Instanciamos un stringBuilder
                 StringBuilder sb = new();
 
                 // Recorremos cada byte del hash obtenido de los datos
-                foreach (byte B in ComputeBytes(inner))
+                foreach (byte B in innerHash)
                 {
                     // Concatena el byte en formato hexadecimal al string
                     sb.Append(B.ToString("x2"));
@@ -44,6 +44,15 @@ namespace NetCorePGP
 
                 // Retorna el string obtenido
                 return !uppercase ? sb.ToString().ToLower() : sb.ToString().ToUpper();
+            }
+
+            public static string ComputeBytesToString(byte[] inner, bool uppercase = false)
+            {
+                // Computa el hash y hace un parse a string
+                string hashString = ParseString(ComputeBytes(inner), uppercase);
+
+                // Retorna el string obtenido
+                return !uppercase ? hashString.ToLower() : hashString.ToUpper();
             }
 
             public static string ComputeStringToString(string inner, bool uppercase = false)
