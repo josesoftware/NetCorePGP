@@ -4189,7 +4189,7 @@ namespace NetCorePGP
         /// <param name="encryptDataCompression">Algoritmo de compresión a aplicar a los datos encriptados para reducir el espacio ocupado por los mimos</param>
         /// <param name="signHashAlgorithm">Algoritmo de hash que se empleará para realizar la firma digital</param>
         /// <returns>Array de bytes con los datos encriptados y firmados</returns>
-        public byte[] EncryptAndSign(byte[] clearData, PgpPublicKey[] recipients, PgpSecretKey signer, char[]? signerPassphrase, bool withIntegrityCheck = false, bool armor = false, CompressionAlgorithmTag encryptDataCompression = CompressionAlgorithmTag.Uncompressed, HashAlgorithmTag signHashAlgorithm = HashAlgorithmTag.Sha256, bool passthorughIfEncryptionFails = false, bool passthroughIfSignatureFails = false)
+        public byte[] EncryptAndSign(byte[] clearData, PgpPublicKey[]? recipients, PgpSecretKey signer, char[]? signerPassphrase, bool withIntegrityCheck = false, bool armor = false, CompressionAlgorithmTag encryptDataCompression = CompressionAlgorithmTag.Uncompressed, HashAlgorithmTag signHashAlgorithm = HashAlgorithmTag.Sha256, bool passthorughIfEncryptionFails = false, bool passthroughIfSignatureFails = false)
         {
             // Resetea contador de tiempo transcurrido
             Utilities.Time.ResetElapsed();
@@ -4216,7 +4216,7 @@ namespace NetCorePGP
         /// <param name="encryptDataCompression">Algoritmo de compresión a aplicar a los datos encriptados para reducir el espacio ocupado por los mimos</param>
         /// <param name="signHashAlgorithm">Algoritmo de hash que se empleará para realizar la firma digital</param>
         /// <returns>Array de bytes con los datos encriptados y firmados</returns>
-        public byte[] EncryptAndSign(byte[] clearData, PgpPublicKey recipient, PgpSecretKey signer, char[]? signerPassphrase, bool withIntegrityCheck = false, bool armor = false, CompressionAlgorithmTag encryptDataCompression = CompressionAlgorithmTag.Uncompressed, HashAlgorithmTag signHashAlgorithm = HashAlgorithmTag.Sha256, bool passthorughIfEncryptionFails = false, bool passthroughIfSignatureFails = false)
+        public byte[] EncryptAndSign(byte[] clearData, PgpPublicKey? recipient, PgpSecretKey signer, char[]? signerPassphrase, bool withIntegrityCheck = false, bool armor = false, CompressionAlgorithmTag encryptDataCompression = CompressionAlgorithmTag.Uncompressed, HashAlgorithmTag signHashAlgorithm = HashAlgorithmTag.Sha256, bool passthorughIfEncryptionFails = false, bool passthroughIfSignatureFails = false)
         {
             // Resetea contador de tiempo transcurrido
             Utilities.Time.ResetElapsed();
