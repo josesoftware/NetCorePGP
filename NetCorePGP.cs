@@ -18,6 +18,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace NetCorePGP
 {
@@ -1415,7 +1416,7 @@ namespace NetCorePGP
             PgpPublicKey? ppk = GetPgpPublicKey(fingerprint);
 
             // Si no se recupera la llave, sale del método
-            if (ppk == null) { throw new InvalidOperationException(String.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
+            if (ppk == null) { throw new InvalidOperationException(string.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
 
             // Si esta llave pública tiene una llave secreta vinculada, lanzará error de eliminación ilegal
             if (GetPgpSecretKey(fingerprint) != null) { throw new IlegalKeyDeleteException("This public key has a private key. Please delete the private key previously."); }
@@ -1444,7 +1445,7 @@ namespace NetCorePGP
             PgpSecretKey? psk = GetPgpSecretKey(fingerprint);
             
             // Si no se recupera la llave, sale del método
-            if (psk == null) { throw new InvalidOperationException(String.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
+            if (psk == null) { throw new InvalidOperationException(string.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
 
             // Busca el keyring en el bundle y lo manda eliminar
             RemoveKeyRing(SecretKeyRingBundle.GetSecretKeyRing(psk.KeyId));
@@ -3479,7 +3480,7 @@ namespace NetCorePGP
                 if (enc == null)
                 {
                     // Escribe error en el log
-                    Debug.WriteLine(String.Format("No PGP objects found in {0} data", Utilities.File.GetSizeFormatted(inputStream.Length)), "PGP Error");
+                    Debug.WriteLine(string.Format("No PGP objects found in {0} data", Utilities.File.GetSizeFormatted(inputStream.Length)), "PGP Error");
 
                     // Retorna nulo
                     return (null, null);
@@ -4400,10 +4401,40 @@ namespace NetCorePGP
             PgpPublicKey? signer = DoVerify(signedData, signature);
 
             // Si se ha recuperado un firmante, escribirá en el log mensaje de verificación
-            if (signer != null) { Debug.WriteLine("Verified '{2}' key signature on {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(signer, 0)); }
+            if (signer != null) { Debug.WriteLine(string.Format("Verified '{2}' key signature on {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(signer, 0)), "PGP Signature Verification"); }
             // Si no se ha recuperado ningún firmante, escribirá en el log mensaje de no verificación
-            else { Debug.WriteLine("Not verified the signature on {0}", Utilities.File.GetSizeFormatted(signedData.LongLength)); }
-        
+            else { Debug.WriteLine(string.Format("Not verified the signature on {0}", Utilities.File.GetSizeFormatted(signedData.LongLength)), "PGP Signature Verification"); }
+
+
+            // Retorna el PgpPublicKey que ha realizado la firma
+            return signer;
+        }
+
+        /// <summary>
+        /// Método que busca el propietario de una firma en un array de bytes
+        /// </summary>
+        /// <param name="signedData">Datos firmados en formato array</param>
+        /// <returns>El PgpPublicKey que firmó los datos</returns>
+        public PgpPublicKey? Verify(byte[] signedData)
+        {
+            // Si los datos a verificar no superan los 2 bytes, retornará todo como nulo
+            if (signedData.Length <= 2) { return null; }
+
+            // Resetea contador de tiempo transcurrido
+            Utilities.Time.ResetElapsed();
+
+            // Desglosamos la firma y los datos encriptados
+            ushort signatureLength = BitConverter.ToUInt16(signedData, 0);
+            byte[] signature = Utilities.Array.GetByteArrayFragment(2, signatureLength, signedData);
+
+            // Recupera el PgpPublicKey que ha firmado los datos
+            PgpPublicKey? signer = DoVerify(signedData, signature);
+
+            // Si se ha recuperado un firmante, escribirá en el log mensaje de verificación
+            if (signer != null) { Debug.WriteLine(string.Format("Verified '{2}' key signature on {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(signer, 0)), "PGP Signature Verification"); }
+            // Si no se ha recuperado ningún firmante, escribirá en el log mensaje de no verificación
+            else { Debug.WriteLine(string.Format("Not verified the signature on {0}", Utilities.File.GetSizeFormatted(signedData.LongLength)), "PGP Signature Verification"); }
+
             // Retorna el PgpPublicKey que ha realizado la firma
             return signer;
         }
@@ -4440,6 +4471,32 @@ namespace NetCorePGP
         /// </summary>
         /// <param name="verifier">PgpPublicKey con el que verificar los datos</param>
         /// <param name="signedData">Datos firmados en formato array</param>
+        /// <returns>True si se ha validado la firma del PgpPublicKey en los datos</returns>
+        public bool Verify(PgpPublicKey verifier, byte[] signedData)
+        {
+            // Resetea contador de tiempo transcurrido
+            Utilities.Time.ResetElapsed();
+
+            // Desglosamos la firma y los datos encriptados
+            ushort signatureLength = BitConverter.ToUInt16(signedData, 0);
+            byte[] signature = Utilities.Array.GetByteArrayFragment(2, signatureLength, signedData);
+            byte[] encryptedData = Utilities.Array.GetByteArrayFragment(2 + signatureLength, signedData);
+
+            // Realiza la verificación de la firma y recupera el resultado
+            bool verification = DoVerify(verifier, encryptedData, signature);
+
+            // Escribe el resultado en el log
+            Debug.WriteLine(string.Format("{3} '{2}' key sign in {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(verifier, 0), verification ? "Verified" : "Not Verified"), "PGP Signature Verification");
+
+            // Retorna el resultado
+            return verification;
+        }
+
+        /// <summary>
+        /// Método que busca la firma de una clave pública en un array de bytes
+        /// </summary>
+        /// <param name="verifier">PgpPublicKey con el que verificar los datos</param>
+        /// <param name="signedData">Datos firmados en formato array</param>
         /// <param name="signature">Firma digital</param>
         /// <returns>True si se ha validado la firma del PgpPublicKey en los datos</returns>
         public bool Verify(PgpPublicKey verifier, byte[] signedData, byte[] signature)
@@ -4451,7 +4508,7 @@ namespace NetCorePGP
             bool verification = DoVerify(verifier, signedData, signature);
 
             // Escribe el resultado en el log
-            Debug.WriteLine("{3} '{2}' key sign in {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(verifier, 0), verification ? "Verified" : "Not Verified");
+            Debug.WriteLine(string.Format("{3} '{2}' key sign in {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(verifier, 0), verification ? "Verified" : "Not Verified"), "PGP Signature Verification");
 
             // Retorna el resultado
             return verification;
@@ -4466,6 +4523,9 @@ namespace NetCorePGP
         /// <returns>True si se ha validado la firma del PgpPublicKey en los datos</returns>
         private bool DoVerify(PgpPublicKey verifier, byte[] signedBytes, byte[] ExpectedSignatureBytes)
         {
+            // Si los datos a verificar no superan los 2 bytes, retornará todo como nulo
+            if (signedBytes.Length <= 2) { return false; }
+
             // Desglosa la firma y el byte de identificacion de algoritmo de hash
             byte hashAlgorithmId = Utilities.Array.GetByteArrayFragment(0, 1, ExpectedSignatureBytes)[0];
             byte[] signature = Utilities.Array.GetByteArrayFragment(1, ExpectedSignatureBytes);
