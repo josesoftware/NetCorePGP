@@ -8,16 +8,19 @@ using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Utilities.IO;
+using Org.BouncyCastle.Utilities.Zlib;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace NetCorePGP
 {
@@ -1415,7 +1418,7 @@ namespace NetCorePGP
             PgpPublicKey? ppk = GetPgpPublicKey(fingerprint);
 
             // Si no se recupera la llave, sale del método
-            if (ppk == null) { throw new InvalidOperationException(String.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
+            if (ppk == null) { throw new InvalidOperationException(string.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
 
             // Si esta llave pública tiene una llave secreta vinculada, lanzará error de eliminación ilegal
             if (GetPgpSecretKey(fingerprint) != null) { throw new IlegalKeyDeleteException("This public key has a private key. Please delete the private key previously."); }
@@ -1444,7 +1447,7 @@ namespace NetCorePGP
             PgpSecretKey? psk = GetPgpSecretKey(fingerprint);
             
             // Si no se recupera la llave, sale del método
-            if (psk == null) { throw new InvalidOperationException(String.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
+            if (psk == null) { throw new InvalidOperationException(string.Format("Not found any keyring with identifier: '{0}'", fingerprint)); }
 
             // Busca el keyring en el bundle y lo manda eliminar
             RemoveKeyRing(SecretKeyRingBundle.GetSecretKeyRing(psk.KeyId));
@@ -2568,6 +2571,11 @@ namespace NetCorePGP
 
         public static void Test()
         {
+            PgpContext context = PgpContext.Make(mode: PgpContext.PgpContextMode.Persistent, dumpFrequency: PgpContext.PgpKeyRingDumpFrequency.Inmediately, path: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tantra Online Classic\\Keyrings\\"));
+            byte[] jandulila = Encoding.UTF8.GetBytes("Me toca las pelotas");
+
+
+
             /*
             AsymmetricCipherKeyPair ackp = GenerateAsymmetricalKeyPair(AsymmetricalEncryptionAlgorithms.RSA, RsaStrengthPriority.Balanced);
 
@@ -3479,7 +3487,7 @@ namespace NetCorePGP
                 if (enc == null)
                 {
                     // Escribe error en el log
-                    Debug.WriteLine(String.Format("No PGP objects found in {0} data", Utilities.File.GetSizeFormatted(inputStream.Length)), "PGP Error");
+                    Debug.WriteLine(string.Format("No PGP objects found in {0} data", Utilities.File.GetSizeFormatted(inputStream.Length)), "PGP Error");
 
                     // Retorna nulo
                     return (null, null);
@@ -3806,7 +3814,7 @@ namespace NetCorePGP
             inputStream.CopyTo(_input);
 
             // Llama al método principal y devuelve el resultado
-            return Encrypt(_input.ToArray(), new PgpPublicKey[] { recipient }, withIntegrityCheck, armor, compressionAlgorithm);
+            return Encrypt(_input.ToArray(), [recipient], withIntegrityCheck, armor, compressionAlgorithm);
 
         }
 
@@ -4177,6 +4185,146 @@ namespace NetCorePGP
             return Signature.ToArray();
         }
 
+
+        /**
+        * Generate an encapsulated signed file.
+        *
+        * @param fileName
+        * @param keyIn
+        * @param outputStream
+        * @param pass
+        * @param armor
+        */
+        private Stream NewDoSign(byte[] clearData, PgpSecretKey pgpSec, char[] pass, bool armor,CompressionAlgorithmTag compressionAlgorithm = CompressionAlgorithmTag.Uncompressed, HashAlgorithmTag signHashAlgorithm = HashAlgorithmTag.Sha256)
+        {
+            Stream outputStream = new MemoryStream();
+
+            if (armor)
+            {
+                outputStream = new ArmoredOutputStream(outputStream);
+            }
+
+            PgpPrivateKey pgpPrivKey = pgpSec.ExtractPrivateKey(pass);
+
+            PgpSignatureGenerator sGen = new(pgpSec.PublicKey.Algorithm, signHashAlgorithm);
+
+            sGen.InitSign(PgpSignature.BinaryDocument, pgpPrivKey);
+            foreach (string userId in pgpSec.PublicKey.GetUserIds())
+            {
+                PgpSignatureSubpacketGenerator spGen = new PgpSignatureSubpacketGenerator();
+                spGen.SetSignerUserId(false, userId);
+                sGen.SetHashedSubpackets(spGen.Generate());
+                // Just the first one!
+                break;
+            }
+
+            PgpCompressedDataGenerator cGen = new(compressionAlgorithm);
+
+            Stream compressedOut = cGen.Open(outputStream);
+
+
+            //BcpgOutputStream bOut = new(cOut);
+
+            sGen.GenerateOnePassVersion(false).Encode(compressedOut);
+
+            // FileInfo file = new FileInfo(fileName);
+
+            // PgpLiteralDataGenerator lGen = new PgpLiteralDataGenerator();
+
+            // Stream lOut = lGen.Open(bOut, PgpLiteralData.Binary, file);
+            // FileStream fIn = file.OpenRead();
+            // int ch = 0;
+
+
+            compressedOut.Write(clearData, 0, clearData.Length);
+            sGen.Update(clearData, 0, clearData.Length);
+
+            // fIn.Close();
+            // lGen.Close();
+
+            sGen.Generate().Encode(compressedOut);
+
+            compressedOut.Close();
+
+            if (armor)
+            {
+                outputStream.Close();
+            }
+
+            return outputStream;
+        }
+
+        /*
+        public void SignAndEncryptFile(string actualFileName, string embeddedFileName,
+            Stream keyIn, long keyId, Stream outputStream,
+            char[] password, bool armor, bool withIntegrityCheck, PgpPublicKey encKey)
+        {
+            const int BUFFER_SIZE = 1 << 16; // should always be power of 2
+
+            if (armor)
+                outputStream = new ArmoredOutputStream(outputStream);
+
+            // Init encrypted data generator
+            PgpEncryptedDataGenerator encryptedDataGenerator =
+                new PgpEncryptedDataGenerator(SymmetricKeyAlgorithmTag.Cast5, withIntegrityCheck, new SecureRandom());
+            encryptedDataGenerator.AddMethod(encKey);
+            Stream encryptedOut = encryptedDataGenerator.Open(outputStream, new byte&#91;BUFFER_SIZE&#93;);
+ 
+            // Init compression
+            PgpCompressedDataGenerator compressedDataGenerator = new PgpCompressedDataGenerator(CompressionAlgorithmTag.Zip);
+            Stream compressedOut = compressedDataGenerator.Open(encryptedOut);
+
+            // Init signature
+            PgpSecretKeyRingBundle pgpSecBundle = new PgpSecretKeyRingBundle(PgpUtilities.GetDecoderStream(keyIn));
+            PgpSecretKey pgpSecKey = pgpSecBundle.GetSecretKey(keyId);
+            if (pgpSecKey == null)
+                throw new ArgumentException(keyId.ToString("X") + " could not be found in specified key ring bundle.", "keyId");
+            PgpPrivateKey pgpPrivKey = pgpSecKey.ExtractPrivateKey(password);
+            PgpSignatureGenerator signatureGenerator = new PgpSignatureGenerator(pgpSecKey.PublicKey.Algorithm, HashAlgorithmTag.Sha1);
+            signatureGenerator.InitSign(PgpSignature.BinaryDocument, pgpPrivKey);
+            foreach (string userId in pgpSecKey.PublicKey.GetUserIds())
+            {
+                PgpSignatureSubpacketGenerator spGen = new PgpSignatureSubpacketGenerator();
+                spGen.SetSignerUserId(false, userId);
+                signatureGenerator.SetHashedSubpackets(spGen.Generate());
+                // Just the first one!
+                break;
+            }
+            signatureGenerator.GenerateOnePassVersion(false).Encode(compressedOut);
+
+            // Create the Literal Data generator output stream
+            PgpLiteralDataGenerator literalDataGenerator = new PgpLiteralDataGenerator();
+            FileInfo embeddedFile = new FileInfo(embeddedFileName);
+            FileInfo actualFile = new FileInfo(actualFileName);
+            // TODO: Use lastwritetime from source file
+            Stream literalOut = literalDataGenerator.Open(compressedOut, PgpLiteralData.Binary,
+                embeddedFile.Name, actualFile.LastWriteTime, new byte&#91;BUFFER_SIZE&#93;);
+ 
+            // Open the input file
+            FileStream inputStream = actualFile.OpenRead();
+
+            byte&#91;&#93; buf = new byte&#91;BUFFER_SIZE&#93;;
+            int len;
+            while ((len = inputStream.Read(buf, 0, buf.Length)) > 0)
+            {
+                literalOut.Write(buf, 0, len);
+                signatureGenerator.Update(buf, 0, len);
+            }
+
+            literalOut.Close();
+            literalDataGenerator.Close();
+            signatureGenerator.Generate().Encode(compressedOut);
+            compressedOut.Close();
+            compressedDataGenerator.Close();
+            encryptedOut.Close();
+            encryptedDataGenerator.Close();
+            inputStream.Close();
+
+            if (armor)
+                outputStream.Close();
+        }
+        */
+
         /// <summary>
         /// Método que encripta datos y los firmas despues de encriptarlos
         /// </summary>
@@ -4409,6 +4557,29 @@ namespace NetCorePGP
         }
 
         /// <summary>
+        /// Método que busca el propietario de una firma en un array de bytes
+        /// </summary>
+        /// <param name="signedData">Datos firmados en formato array</param>
+        /// <param name="signature">Firma a buscar</param>
+        /// <returns>El PgpPublicKey que firmó los datos</returns>
+        public PgpPublicKey? NewVerify(byte[] signedData, byte[] signature)
+        {
+            // Resetea contador de tiempo transcurrido
+            Utilities.Time.ResetElapsed();
+
+            // Recupera el PgpPublicKey que ha firmado los datos
+            PgpPublicKey? signer = NewDoVerify(signedData, signature);
+
+            // Si se ha recuperado un firmante, escribirá en el log mensaje de verificación
+            if (signer != null) { Debug.WriteLine("Verified '{2}' key signature on {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(signer, 0)); }
+            // Si no se ha recuperado ningún firmante, escribirá en el log mensaje de no verificación
+            else { Debug.WriteLine("Not verified the signature on {0}", Utilities.File.GetSizeFormatted(signedData.LongLength)); }
+
+            // Retorna el PgpPublicKey que ha realizado la firma
+            return signer;
+        }
+
+        /// <summary>
         /// Método maestro que busca el propietario de una firma en un array de bytes
         /// </summary>
         /// <param name="signedData">Datos firmados en formato array</param>
@@ -4433,6 +4604,55 @@ namespace NetCorePGP
 
             // Sale con nulo si no se encuentra una firma
             return null;
+        }
+
+        /// <summary>
+        /// Método maestro que busca el propietario de una firma en un array de bytes
+        /// </summary>
+        /// <param name="signedData">Datos firmados en formato array</param>
+        /// <param name="signature">Firma a buscar</param>
+        /// <returns>El PgpPublicKey que firmó los datos</returns>
+        private PgpPublicKey? NewDoVerify(byte[] signedData, byte[] signature)
+        {
+            // Recorre cada public key del keyring bundle
+            foreach (PgpPublicKeyRing ppkr in PublicKeyRingBundle.GetKeyRings())
+            {
+                // Recorre cada public key del keyring
+                foreach (PgpPublicKey ppk in ppkr.GetPublicKeys())
+                {
+                    // Si se detecta una firma del public key  la firma
+                    if (NewDoVerify(ppk, signedData, signature))
+                    {
+                        // Retorna el PgpPublicKey que ha verificado la firma
+                        return ppk;
+                    }
+                }
+            }
+
+            // Sale con nulo si no se encuentra una firma
+            return null;
+        }
+
+        /// <summary>
+        /// Método que busca la firma de una clave pública en un array de bytes
+        /// </summary>
+        /// <param name="verifier">PgpPublicKey con el que verificar los datos</param>
+        /// <param name="signedData">Datos firmados en formato array</param>
+        /// <param name="signature">Firma digital</param>
+        /// <returns>True si se ha validado la firma del PgpPublicKey en los datos</returns>
+        public bool NewVerify(PgpPublicKey verifier, byte[] signedData, byte[] signature)
+        {
+            // Resetea contador de tiempo transcurrido
+            Utilities.Time.ResetElapsed();
+
+            // Realiza la verificación de la firma y recupera el resultado
+            bool verification = NewDoVerify(verifier, signedData, signature);
+
+            // Escribe el resultado en el log
+            Debug.WriteLine("{3} '{2}' key sign in {0} in {1}", Utilities.File.GetSizeFormatted(signedData.LongLength), Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds), GetKeyUid(verifier, 0), verification ? "Verified" : "Not Verified");
+
+            // Retorna el resultado
+            return verification;
         }
 
         /// <summary>
@@ -4548,6 +4768,44 @@ namespace NetCorePGP
 
             // Retorna el resultado de la verificación
             return Signer.VerifySignature(signature);
+        }
+
+        /// <summary>
+        /// Método maestro que busca la firma de una clave pública en un array de bytes
+        /// </summary>
+        /// <param name="publicKey">PgpPublicKey con el que verificar los datos</param>
+        /// <param name="data">Datos firmados en formato array</param>
+        /// <param name="expectedSignatureBytes">Firma digital</param>
+        /// <returns>True si se ha validado la firma del PgpPublicKey en los datos</returns>
+        private bool NewDoVerify(PgpPublicKey publicKey, byte[] data, byte[] expectedSignatureBytes)
+        {
+            // Se decodifica la firma en un stream
+            Stream stream = PgpUtilities.GetDecoderStream(new MemoryStream(expectedSignatureBytes));
+
+            // Se construye un PgpObjectFactory desde el stream
+            PgpObjectFactory pgpFact = new(stream);
+
+            // Si el ControlResponse viene nulo
+            if (pgpFact.NextPgpObject() is not PgpSignatureList sList)
+            {
+                // Lanza excepción
+                throw new InvalidOperationException("No signature found on expected signature");
+            }
+
+            // Recupera la firma PGP 
+            PgpSignature firstSig = sList[0];
+
+            // Añade el PgpPublicKey con el que realizar la verificación
+            firstSig.InitVerify(publicKey);
+
+            // Actualiza los datos de verficación
+            firstSig.Update(data);
+
+            // Realiza la verificación
+            bool verified = firstSig.Verify();
+            
+            // Retorna el resultado
+            return verified;
         }
 
         /// <summary>
