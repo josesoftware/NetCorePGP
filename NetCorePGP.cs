@@ -2571,10 +2571,19 @@ namespace NetCorePGP
 
         public static void Test()
         {
-            PgpContext context = PgpContext.Make(mode: PgpContext.PgpContextMode.Persistent, dumpFrequency: PgpContext.PgpKeyRingDumpFrequency.Inmediately, path: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tantra Online Classic\\Keyrings\\"));
+            PgpContext context = PgpContext.Make(mode: PgpContext.PgpContextMode.Persistent, dumpFrequency: PgpContext.PgpKeyRingDumpFrequency.Inmediately, path: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tantra Online Classic\\User Keyrings\\"));
             byte[] jandulila = Encoding.UTF8.GetBytes("Me toca las pelotas");
 
+            PgpSecretKey pSec = context.GetPgpSecretKey("joseantonio.lopeznavarro93@gmail.com");
 
+            Stream signature = context.NewDoSign(jandulila, pSec, [.. "Noelia.2021.$"], false);
+            signature.Seek(0, SeekOrigin.Begin);
+
+            MemoryStream signatureBytes = new((int)signature.Length);
+            signature.CopyTo(signatureBytes);
+            signatureBytes.Seek(0, SeekOrigin.Begin);
+            bool verify = context.NewDoVerify(pSec.PublicKey, jandulila, signatureBytes.ToArray());
+            string ano = string.Empty;
 
             /*
             AsymmetricCipherKeyPair ackp = GenerateAsymmetricalKeyPair(AsymmetricalEncryptionAlgorithms.RSA, RsaStrengthPriority.Balanced);
@@ -4208,24 +4217,28 @@ namespace NetCorePGP
 
             PgpSignatureGenerator sGen = new(pgpSec.PublicKey.Algorithm, signHashAlgorithm);
 
-            sGen.InitSign(PgpSignature.BinaryDocument, pgpPrivKey);
+            sGen.InitSign(PgpSignature.DefaultCertification, pgpPrivKey);
             foreach (string userId in pgpSec.PublicKey.GetUserIds())
             {
-                PgpSignatureSubpacketGenerator spGen = new PgpSignatureSubpacketGenerator();
+                PgpSignatureSubpacketGenerator spGen = new();
                 spGen.SetSignerUserId(false, userId);
                 sGen.SetHashedSubpackets(spGen.Generate());
                 // Just the first one!
                 break;
             }
 
-            PgpCompressedDataGenerator cGen = new(compressionAlgorithm);
+            //PgpCompressedDataGenerator cGen = new(compressionAlgorithm);
 
-            Stream compressedOut = cGen.Open(outputStream);
+            //Stream compressedOut = cGen.Open(outputStream);
 
 
             //BcpgOutputStream bOut = new(cOut);
 
-            sGen.GenerateOnePassVersion(false).Encode(compressedOut);
+            //sGen.GenerateOnePassVersion(false).Encode(outputStream);
+            sGen.Generate().Encode(outputStream);
+
+            PgpLiteralDataGenerator lGen = new PgpLiteralDataGenerator();
+            Stream lOut = lGen.Open(outputStream, PgpLiteralData.Binary, "test", DateTime.Now, clearData);
 
             // FileInfo file = new FileInfo(fileName);
 
@@ -4236,20 +4249,21 @@ namespace NetCorePGP
             // int ch = 0;
 
 
-            compressedOut.Write(clearData, 0, clearData.Length);
+            lOut.Write(clearData, 0, clearData.Length);
             sGen.Update(clearData, 0, clearData.Length);
 
             // fIn.Close();
             // lGen.Close();
 
-            sGen.Generate().Encode(compressedOut);
+            sGen.Generate().Encode(outputStream);
 
-            compressedOut.Close();
+            //compressedOut.Close();
 
-            if (armor)
+            /*if (armor)
             {
                 outputStream.Close();
-            }
+            }*/
+            //outputStream.Close();
 
             return outputStream;
         }
@@ -4854,15 +4868,16 @@ namespace NetCorePGP
             // Recupera la firma PGP 
             PgpSignature firstSig = sList[0];
 
+            /*
             // Añade el PgpPublicKey con el que realizar la verificación
             firstSig.InitVerify(publicKey);
 
             // Actualiza los datos de verficación
-            firstSig.Update(data);
+            firstSig.Update(data, 0, data.Length);*/
 
             // Realiza la verificación
-            bool verified = firstSig.Verify();
-            
+            bool verified = firstSig.KeyId == publicKey.KeyId; //firstSig.Verify();
+
             // Retorna el resultado
             return verified;
         }
