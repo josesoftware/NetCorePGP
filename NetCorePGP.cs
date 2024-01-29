@@ -4944,6 +4944,44 @@ namespace NetCorePGP
         }
 
         /// <summary>
+        /// Método maestro que verifica y desencripta los datos encriptados en formato stream
+        /// </summary>
+        /// <param name="data">Array de bytes de datos encriptados</param>
+        /// <param name="decrypterPassprase">Passphrase para la desencriptación de los datos</param>
+        /// <param name="expectedSigner">PgpPublicKey con el que comprobar la firma de los datos</param>
+        /// <returns>Stream con los datos desencriptados, PgpPublicKey con el verificador de la firma, PgpSecretKey con el desencriptador</returns>
+        private (Stream? data, PgpPublicKey? signer, PgpSecretKey? decrypter) DoVerifyAndDecrypt(byte[] data, string decrypterPassprase, PgpPublicKey expectedSigner, bool passthroughDecryptionFails = false, bool passthroughVerificationFails = false)
+        {
+            // Si los datos a verificar no superan los 2 bytes, retornará todo como nulo
+            if (data.Length <= 2) { return (null, null, null); }
+
+            // Desglosamos la firma y los datos encriptados
+            ushort signatureLength = BitConverter.ToUInt16(data, 0);
+            byte[] signature = Utilities.Array.GetByteArrayFragment(2, signatureLength, data);
+            byte[] encryptedData = Utilities.Array.GetByteArrayFragment(2 + signatureLength, data);
+
+            // Verifica la firma y recupera el PgpPublicKey
+            PgpPublicKey? verifier = null;
+
+            // Verifica la firma y recupera el PgpPublicKey
+            try { verifier = DoVerify(expectedSigner, encryptedData, signature) ? expectedSigner : null; } catch (Exception) { }
+
+            // Declaramos datos de retorno
+            Stream? _returnData;
+            PgpSecretKey? decrypter;
+
+            // Desencripta los datos
+            (_returnData, decrypter) = DoDecrypt(new MemoryStream(encryptedData), decrypterPassprase);
+
+            // Si no se han recuperado datos de la desencriptación pero se desea pasar por alto, retornará los datos en bruto
+            if (_returnData == null && passthroughDecryptionFails) { _returnData = new MemoryStream(encryptedData); }
+
+            // Retorna resultados
+            return (_returnData, verifier, decrypter);
+        }
+
+
+        /// <summary>
         /// Método que verifica y desencripta los datos encriptados en formato array de bytes
         /// </summary>
         /// <param name="data">Array de bytes de datos encriptados</param>
@@ -4980,6 +5018,45 @@ namespace NetCorePGP
             // Retorna resultados
             return (_arrayReturn, verifier, decrypter);
         }
+
+        /// <summary>
+        /// Método que verifica y desencripta los datos encriptados en formato array de bytes
+        /// </summary>
+        /// <param name="data">Array de bytes de datos encriptados</param>
+        /// <param name="decrypterPassprase">Passphrase para la desencriptación de los datos</param>
+        /// <returns>Array de bytes con los datos desencriptados, PgpPublicKey con el verificador de la firma, PgpSecretKey con el desencriptador</returns>
+        public (byte[]? data, PgpPublicKey? signer, PgpSecretKey? decrypter) VerifyAndDecryptToArray(byte[] data, string decrypterPassprase, PgpPublicKey expectedSigner, bool passthroughDecryptionFails = false, bool passthroughVerificationFails = false)
+        {
+            // Resetea contador de tiempo transcurrido
+            Utilities.Time.ResetElapsed();
+
+            // Invoca al método maestro
+            (Stream? _returnData, PgpPublicKey? verifier, PgpSecretKey? decrypter) = DoVerifyAndDecrypt(data, decrypterPassprase, expectedSigner, passthroughDecryptionFails, passthroughVerificationFails);
+
+            // Escribe en el log
+            Debug.WriteLine("{2} on {0} and {3} in {1}"
+                , Utilities.File.GetSizeFormatted(data.LongLength)
+                , Utilities.Time.GetElapsed(Utilities.Time.ElapsedUnit.Milliseconds)
+                , verifier == null ? "Not verified signature" : string.Format("Verified signature of '{0}' key", GetKeyUid(verifier, 0))
+                , _returnData != null && decrypter != null ? string.Format("decrypted {0} using '{1}' key", Utilities.File.GetSizeFormatted(_returnData.Length), GetKeyUid(decrypter, 0)) : "cannot decrypt data");
+
+            // Declaramos array de retorno
+            byte[]? _arrayReturn = null;
+
+            // Si se han leído datos
+            if (_returnData != null)
+            {
+                // Instanciamos un array de bytes de la longitud del stream
+                _arrayReturn = new byte[_returnData.Length];
+
+                // Escribe los datos del stream en el array de datos
+                _returnData.Read(_arrayReturn, 0, _arrayReturn.Length);
+            }
+
+            // Retorna resultados
+            return (_arrayReturn, verifier, decrypter);
+        }
+
 
         /// <summary>
         /// Método estático que comprime datos continentes en un array de bytes
