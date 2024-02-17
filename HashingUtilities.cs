@@ -1,8 +1,10 @@
-﻿using Org.BouncyCastle.Crypto;
+﻿using Org.BouncyCastle.Bcpg;
+using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,6 +12,29 @@ namespace NetCorePGP
 {
     public static class HashingUtilities
     {
+        public static class CRC24
+        {
+            public static int ComputeBytes(byte[] inner)
+            {
+                Crc24 crc = new();
+
+                // Recorre cada byte
+                foreach(byte b in inner) 
+                {
+                    // Actualiza el CRC
+                    crc.Update(b);
+                }
+
+                // Retorna el hash
+                return crc.Value;
+            }
+            public static int ComputeString(string innerString)
+            {
+                // Convierte el string en bytes y lo computa
+                return ComputeBytes(Encoding.UTF8.GetBytes(innerString));
+            }
+        }
+
         public static class SHA512
         {
             public static byte[] ComputeBytes(byte[] inner)

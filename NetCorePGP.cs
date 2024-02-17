@@ -2026,7 +2026,7 @@ namespace NetCorePGP
         /// <param name="matchPartial">True: Realizará búsquedas parciales en lugar de exactas</param>
         /// <param name="ignoreCase">True: Ignorará mayúsculas y minúsculas en la búsqueda</param>
         /// <returns>Nulo si no encuentra la clave pública</returns>
-        public PgpPublicKey? GetPgpPublicKey(string search, bool matchPartial = false, bool ignoreCase = false)
+        public PgpPublicKey? GetPgpPublicKey(string search, bool onlyMasterKeys = false, bool matchPartial = false, bool ignoreCase = false)
         {
             // Si el texto de busqueda ya viene como nulo, retorna nulo directamente
             if (search == null) { return null; }
@@ -2044,6 +2044,9 @@ namespace NetCorePGP
                 // Recorre las claves públicas del anillo
                 foreach(PgpPublicKey ppk in ppkr.GetPublicKeys())
                 {
+                    // Si la baliza de buscar solo master keys esta activa y el PgpPublicKey no es un masterKey, pasa del método
+                    if (onlyMasterKeys && !ppk.IsMasterKey) { continue; }
+
                     // Si el fingerprint de la clave pública concuerda con el search
                     if (HashedFingerprint(ppk, true) == search.ToUpper()) 
                     { 
@@ -4637,6 +4640,9 @@ namespace NetCorePGP
                 // Recorre cada public key del keyring
                 foreach (PgpPublicKey ppk in ppkr.GetPublicKeys())
                 {
+                    // Descarta las PgpPublicKeys que nos son MasterKeys
+                    if (!ppk.IsMasterKey) { continue; }
+
                     // Si se detecta una firma del public key  la firma
                     if (DoVerify(ppk, signedData, signature))
                     {
