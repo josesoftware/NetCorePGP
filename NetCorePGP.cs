@@ -1479,6 +1479,33 @@ namespace NetCorePGP
                     return pgpPub;
                 }
 
+                // Recupera el publicKey maestro del keyring a importar
+                PgpPublicKey ppk2 = pgpPub.GetPublicKey();
+
+                // Recorre el bundle
+                foreach (PgpPublicKeyRing ppkr in PublicKeyRingBundle.GetKeyRings())
+                {
+                    // Instancia los publicKeys
+                    PgpPublicKey ppk = ppkr.GetPublicKey();
+
+                    // Si no es clave maesrta, salta el ciclo
+                    if (!ppk.IsMasterKey)
+                    { continue; }
+
+                    // Si el ID ya esta de alta
+                    if (GetKeyUid(ppk, 0) == GetKeyUid(ppk2, 0))
+                    {
+                        // Si la opción de sobreescribir si existe no esta marcada como True
+                        if (!rewriteIfExists) { throw new NoneImportKeyException("The keyring already exists!"); }
+
+                        // Actualiza el keyring en el bundle
+                        UpdateKeyRing(pgpPub);
+
+                        // Sale del método
+                        return pgpPub;
+                    }
+                }
+
                 // Añade el nuevo keyring al bundle
                 PublicKeyRingBundle = PgpPublicKeyRingBundle.AddPublicKeyRing(PublicKeyRingBundle, pgpPub);
 
@@ -1491,6 +1518,59 @@ namespace NetCorePGP
 
                 // Sale sin errores
                 return pgpPub;
+            }
+            catch (IOException)
+            {
+                // Lanza excepción personalizada
+                throw new NoneImportKeyException("No keyring data found in stream");
+            }
+            catch (InvalidKeyException)
+            {
+                // Lanza excepción personalizada
+                throw new NoneImportKeyException("The keyring does not meet the validity requirements");
+            }
+
+            // Lanza error desconocido
+            throw new InvalidOperationException("Unknown error ocurred trying to import key ring from stream.");
+        }
+
+        /// <summary>
+        /// Método maestro que reemplaza un keyring público existente por otro nuevo
+        /// </summary>
+        /// <param name="newPgpPub">PgpPublicKeyRing a que remplazará al existente</param>
+        /// <param name="oldPgpPub">PgpPublicKeyRing a que será reemplazado</param>
+        /// <exception cref="NoneImportKeyException">Excepción producida cuando ocurre algún problema con el keyring a importar</exception>
+        /// <exception cref="InvalidOperationException">Excepción producida cunado ocurre un error no controlado en el proceso de importación</exception>
+        public PgpPublicKeyRing ReplacePublicKeyRing(PgpPublicKeyRing newPgpPub, PgpPublicKeyRing oldPgpPub)
+        {
+            try
+            {
+                // Valida ambos keyring
+                ValidateKeyRing(newPgpPub);
+                ValidateKeyRing(oldPgpPub);
+
+                // Si el keyring ya existe en bundle, lo sobreescribe
+                if (PublicKeyRingBundle.GetPublicKeyRing(newPgpPub.GetPublicKey().KeyId) != null)
+                {
+                    // Lanza excepción
+                    throw new NoneImportKeyException("The keyring already exists!");
+                }
+
+                // Elimina el viejo keyring
+                RemoveKeyRing(oldPgpPub);
+
+                // Añade el nuevo keyring al bundle
+                PublicKeyRingBundle = PgpPublicKeyRingBundle.AddPublicKeyRing(PublicKeyRingBundle, newPgpPub);
+
+                // Si el volcado de datos inmediato está activado
+                if (PublicKeyRingDumpFrequency == PgpKeyRingDumpFrequency.Inmediately)
+                {
+                    // Realiza el volcado de datos a disco
+                    DumpKeyRingBundle(in PublicKeyRingBundle);
+                }
+
+                // Sale sin errores
+                return newPgpPub;
             }
             catch (IOException)
             {
