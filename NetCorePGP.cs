@@ -971,7 +971,7 @@ namespace NetCorePGP
             PgpSecretKey newKey = PgpSecretKey.CopyWithNewPassword(oldKey, oldPassphrase, newPassphrase, oldKey.KeyEncryptionAlgorithm, new SecureRandom());
 
             // Crear un nuevo anillo con la nueva clave privada
-            PgpSecretKeyRing newKeyRing = new(Array.Empty<byte>());
+            PgpSecretKeyRing newKeyRing = new([]);
 
             // Recorre todos los SecretKey del KeyRing original
             foreach (PgpSecretKey key in oldKeyRing.GetSecretKeys())
